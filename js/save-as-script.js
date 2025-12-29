@@ -9,12 +9,17 @@ const extension = {
 					id: "triggerSaveAsScript",
 					label: "Save As Script",
 					function: () => { extension.savePythonScript(); }
+				},
+				{
+					id: "triggerSaveAsLibrary",
+					label: "Save As Library",
+					function: () => { extension.saveAsLibrary(); }
 				}
 			],
 	menuCommands: [
 		{
 			path: ["File"],
-			commands: ["triggerSaveAsScript"]
+			commands: ["triggerSaveAsScript", "triggerSaveAsLibrary"]
 		}
 	],
 	init() {
@@ -50,6 +55,31 @@ const extension = {
 					window.URL.revokeObjectURL(url);
 				}, 0);
 			}
+		});
+	},
+	saveAsLibrary() {
+		var name = prompt("Library Name:");
+		if(name === undefined || name === null || name === "") {
+			return
+		}
+		var destination = prompt("Destination Path (absolute path):");
+		if(destination === undefined || destination === null || destination === "") {
+			return
+		}
+
+		app.graphToPrompt().then(async (p) => {
+			const json = JSON.stringify({
+                name: name,
+                destination: destination,
+                workflow: JSON.stringify(p.output, null, 2)
+            }, null, 2);
+			
+			var response = await api.fetchApi(`/saveaslibrary`, { method: "POST", body: json });
+			if(response.status == 200) {
+				alert("Library saved successfully to " + destination + "/" + name);
+			} else {
+                alert("Error saving library: " + await response.text());
+            }
 		});
 	},
 	async setup() {

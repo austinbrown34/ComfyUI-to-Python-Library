@@ -640,3 +640,251 @@ def main() -> None:
 if __name__ == "__main__":
     """Run the main function."""
     main()
+
+class LibraryCodeGenerator(CodeGenerator):
+    def __init__(self, node_class_mappings: Dict, base_node_class_mappings: Dict):
+        super().__init__(node_class_mappings, base_node_class_mappings)
+        self.args = {}
+
+    def generate_workflow(
+        self,
+        load_order: List,
+        queue_size: int = 10,
+    ) -> str:
+        # Create the necessary data structures to hold imports and generated code
+        import_statements, executed_variables, special_functions_code, code = (
+            set(["NODE_CLASS_MAPPINGS"]),
+            {},
+            [],
+            [],
+        )
+        # This dictionary will store the names of the objects that we have already initialized
+        initialized_objects = {}
+
+        custom_nodes = False
+        # Loop over each dictionary in the load order list
+        for idx, data, is_special_function in load_order:
+            # Generate class definition and inputs from the data
+            inputs, class_type = data["inputs"], data["class_type"]
+            input_types = self.node_class_mappings[class_type].INPUT_TYPES()
+            class_def = self.node_class_mappings[class_type]()
+
+            # If required inputs are not present, skip the node as it will break the code if passed through to the script
+            missing_required_variable = False
+            if "required" in input_types.keys():
+                for required in input_types["required"]:
+                    if required not in inputs.keys():
+                        missing_required_variable = True
+            if missing_required_variable:
+                continue
+
+            # If the class hasn't been initialized yet, initialize it and generate the import statements
+            if class_type not in initialized_objects:
+                # No need to use preview image nodes since we are executing the script in a terminal
+                if class_type == "PreviewImage":
+                    continue
+
+                class_type, import_statement, class_code = self.get_class_info(
+                    class_type
+                )
+                initialized_objects[class_type] = self.clean_variable_name(class_type)
+                if class_type in self.base_node_class_mappings.keys():
+                    import_statements.add(import_statement)
+                if class_type not in self.base_node_class_mappings.keys():
+                    custom_nodes = True
+                special_functions_code.append(class_code)
+
+            # Get all possible parameters for class_def
+            class_def_params = self.get_function_parameters(
+                getattr(class_def, class_def.FUNCTION)
+            )
+            no_params = class_def_params is None
+
+            # Remove any keyword arguments from **inputs if they are not in class_def_params
+            inputs = {
+                key: value
+                for key, value in inputs.items()
+                if no_params or key in class_def_params
+            }
+            # Deal with hidden variables
+            if (
+                "hidden" in input_types.keys()
+                and "unique_id" in input_types["hidden"].keys()
+            ):
+                inputs["unique_id"] = random.randint(1, 2**64)
+            elif class_def_params is not None:
+                if "unique_id" in class_def_params:
+                    inputs["unique_id"] = random.randint(1, 2**64)
+
+            # Process inputs to identify potential CLI arguments
+            processed_inputs = {}
+            for key, value in inputs.items():
+                if isinstance(value, (int, float, str)) and key not in ["noise_seed", "seed", "unique_id"]:
+                     # Create a unique argument name
+                    arg_name = f"{self.clean_variable_name(class_type)}_{idx}_{key}"
+                    self.args[arg_name] = {"default": value, "type": type(value).__name__}
+                    processed_inputs[key] = f"args.{arg_name}"
+                else:
+                    processed_inputs[key] = value
+            
+            # Create executed variable and generate code
+            executed_variables[idx] = f"{self.clean_variable_name(class_type)}_{idx}"
+            processed_inputs = self.update_inputs(processed_inputs, executed_variables)
+
+            if is_special_function:
+                special_functions_code.append(
+                    self.create_function_call_code(
+                        initialized_objects[class_type],
+                        class_def.FUNCTION,
+                        executed_variables[idx],
+                        is_special_function,
+                        **processed_inputs,
+                    )
+                )
+            else:
+                code.append(
+                    self.create_function_call_code(
+                        initialized_objects[class_type],
+                        class_def.FUNCTION,
+                        executed_variables[idx],
+                        is_special_function,
+                        **processed_inputs,
+                    )
+                )
+
+        # Generate final code by combining imports and code, and wrap them in a main function
+        final_code = self.assemble_python_code(
+            import_statements, special_functions_code, code, queue_size, custom_nodes
+        )
+
+        return final_code
+
+    def format_arg(self, key: str, value: any) -> str:
+        if isinstance(value, str) and value.startswith("args."):
+             return f"{key}={value}"
+        return super().format_arg(key, value)
+    
+    def assemble_python_code(
+        self,
+        import_statements: set,
+        speical_functions_code: List[str],
+        code: List[str],
+        queue_size: int,
+        custom_nodes=False,
+    ) -> str:
+        # Get the source code of the utils functions as a string
+        # We don't include utils content here, we import from utils
+        
+        static_imports = [
+            "import os",
+            "import random",
+            "import sys",
+            "from typing import Sequence, Mapping, Any, Union",
+            "import torch",
+            "import argparse",
+            "from utils import get_value_at_index, find_path, add_comfyui_directory_to_sys_path, add_extra_model_paths, import_custom_nodes",
+            "\n",
+            "add_comfyui_directory_to_sys_path()",
+            "add_extra_model_paths()",
+        ]
+
+        if custom_nodes:
+            custom_nodes_code = "import_custom_nodes()\n\t"
+        else:
+            custom_nodes_code = ""
+
+        imports_code = [
+            f"from nodes import {', '.join([class_name for class_name in import_statements])}"
+        ]
+
+        # Generate argparse code
+        argparse_code = [
+            "def parse_args():",
+            '\tparser = argparse.ArgumentParser(description="ComfyUI Workflow CLI")',
+        ]
+        
+        for arg_name, arg_info in self.args.items():
+            default_val = arg_info["default"]
+            arg_type = arg_info["type"]
+            if arg_type == "bool":
+                 # Handle boolean properly if needed, but for now simple handling
+                 pass 
+            
+            # Quote string defaults
+            if isinstance(default_val, str):
+                default_val_repr = f"'{default_val}'"
+            else:
+                default_val_repr = str(default_val)
+                
+            argparse_code.append(
+                f'\tparser.add_argument("--{arg_name}", default={default_val_repr}, type={arg_type}, help="Override for {arg_name}")'
+            )
+        
+        argparse_code.append('\treturn parser.parse_args()')
+        argparse_code.append("")
+        
+        argparse_func = "\n".join(argparse_code)
+
+        main_function_code = (
+            "def main():\n\t"
+            + "args = parse_args()\n\t"
+            + f"{custom_nodes_code}with torch.inference_mode():\n\t\t"
+            + "\n\t\t".join(speical_functions_code)
+            + f"\n\n\t\tfor q in range({queue_size}):\n\t\t"
+            + "\n\t\t".join(code)
+        )
+
+        final_code = "\n".join(
+            static_imports
+            + imports_code
+            + ["", argparse_func, "", main_function_code, "", 'if __name__ == "__main__":', "\tmain()"]
+        )
+        
+        final_code = black.format_str(final_code, mode=black.Mode())
+        return final_code
+
+
+class ComfyUItoLibrary:
+    def __init__(self, workflow: str, library_name: str, destination_path: str):
+        self.workflow = workflow
+        self.library_name = library_name
+        self.destination_path = destination_path
+        self.execute()
+
+    def execute(self):
+        # Create directory structure
+        lib_path = os.path.join(self.destination_path, self.library_name)
+        if not os.path.exists(lib_path):
+            os.makedirs(lib_path)
+        
+        # Write __init__.py
+        with open(os.path.join(lib_path, "__init__.py"), "w") as f:
+            f.write("")
+
+        # Write utils.py (copy from comfyui_to_python_utils.py)
+        # We need to read it from current directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        utils_path = os.path.join(current_dir, "comfyui_to_python_utils.py")
+        with open(utils_path, "r") as src, open(os.path.join(lib_path, "utils.py"), "w") as dst:
+             dst.write(src.read())
+
+        # Determine load order
+        data = json.loads(self.workflow)
+        import_custom_nodes() # ensure nodes are loaded
+        load_order_determiner = LoadOrderDeterminer(data, NODE_CLASS_MAPPINGS)
+        load_order = load_order_determiner.determine_load_order()
+
+        # Generate main.py
+        code_generator = LibraryCodeGenerator(NODE_CLASS_MAPPINGS, NODE_CLASS_MAPPINGS)
+        generated_code = code_generator.generate_workflow(load_order)
+        
+        with open(os.path.join(lib_path, "main.py"), "w") as f:
+            f.write(generated_code)
+
+        # Write requirements.txt
+        with open(os.path.join(lib_path, "requirements.txt"), "w") as f:
+            f.write("torch\nnumpy\nPillow\n")
+
+        # Write README.md
+        with open(os.path.join(lib_path, "README.md"), "w") as f:
+            f.write(f"# {self.library_name}\n\nGenerated from ComfyUI workflow.\n\n## Usage\n\n```bash\npython main.py --help\n```")

@@ -56,3 +56,19 @@ async def save_as_script(request):
     except Exception as e:
         traceback.print_exc()
         return web.Response(text=str(e), status=500)
+
+@server.PromptServer.instance.routes.post("/saveaslibrary")
+async def save_as_library(request):
+    try:
+        data = await request.json()
+        name = data["name"]
+        destination = data["destination"]
+        workflow = data["workflow"]
+
+        from comfyui_to_python import ComfyUItoLibrary
+        ComfyUItoLibrary(workflow=workflow, library_name=name, destination_path=destination)
+
+        return web.Response(text="Library created successfully", status=200)
+    except Exception as e:
+        traceback.print_exc()
+        return web.Response(text=str(e), status=500)

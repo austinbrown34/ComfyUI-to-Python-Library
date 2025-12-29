@@ -1,7 +1,7 @@
-## ComfyUI-to-Python-Extension
+## ComfyUI-to-Python-Library
 ![banner](images/comfyui_to_python_banner.png)
 
-The `ComfyUI-to-Python-Extension` is a powerful tool that translates [ComfyUI](https://github.com/comfyanonymous/ComfyUI) workflows into executable Python code. Designed to bridge the gap between ComfyUI's visual interface and Python's programming environment, this script facilitates the seamless transition from design to code execution. Whether you're a data scientist, a software developer, or an AI enthusiast, this tool streamlines the process of implementing ComfyUI workflows in Python.
+The `ComfyUI-to-Python-Library` is a powerful tool that translates [ComfyUI](https://github.com/comfyanonymous/ComfyUI) workflows into executable Python code. Designed to bridge the gap between ComfyUI's visual interface and Python's programming environment, this script facilitates the seamless transition from design to code execution. Whether you're a data scientist, a software developer, or an AI enthusiast, this tool streamlines the process of implementing ComfyUI workflows in Python.
 
 **Convert this:**
 
@@ -140,7 +140,7 @@ if __name__ == "__main__":
 
 2. Clone this repo
     ```bash
-    git clone https://github.com/pydn/ComfyUI-to-Python-Extension.git
+    git clone https://github.com/pydn/ComfyUI-to-Python-Library.git
     ```
 
     After cloning the repo, your `ComfyUI` directory should look like this:
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     /comfy
     /comfy_extras
     /custom_nodes
-    --/ComfyUI-to-Python-Extension
+    --/ComfyUI-to-Python-Library
     /input
     /models
     /output
@@ -183,7 +183,7 @@ if __name__ == "__main__":
 5. Now you can execute the newly created .py file to generate images without launching a server.
 
 ## CLI Usage
-1. Navigate to the `ComfyUI-to-Python-Extension` folder and install requirements
+1. Navigate to the `ComfyUI-to-Python-Library` folder and install requirements
     ```bash
     pip install -r requirements.txt
     ```
@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
 3. Load up your favorite workflows, then click the newly enabled `Save (API Format)` button under Queue Prompt
 
-4. Move the downloaded .json workflow file to your `ComfyUI/ComfyUI-to-Python-Extension` folder
+4. Move the downloaded .json workflow file to your `ComfyUI/ComfyUI-to-Python-Library` folder
 
 5. If needed, add arguments when executing `comfyui_to_python.py` to update the default `input_file` and `output_file` to match your .json workflow file and desired .py file name. By default, the script will look for a file called `workflow_api.json`. You can also update the `queue_size` variable to your desired number of images that you want to generate in a single script execution. By default, the scripts will generate 10 images. Run `python comfyui_to_python.py --help` for more details.
 
