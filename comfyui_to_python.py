@@ -870,7 +870,8 @@ class ComfyUItoLibrary:
 
         # Determine load order
         data = json.loads(self.workflow)
-        import_custom_nodes() # ensure nodes are loaded
+        if os.environ.get("RUNNING_IN_COMFYUI") != "TRUE":
+            import_custom_nodes() # ensure nodes are loaded
         load_order_determiner = LoadOrderDeterminer(data, NODE_CLASS_MAPPINGS)
         load_order = load_order_determiner.determine_load_order()
 
