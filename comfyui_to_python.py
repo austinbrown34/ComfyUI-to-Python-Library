@@ -908,6 +908,19 @@ class ComfyUItoLibrary:
             if os.path.exists(src):
                 shutil.copy2(src, dest_comfyui)
         
+        # Patch nodes.py to remove 'comfy_api' import if present
+        nodes_py_path = os.path.join(dest_comfyui, "nodes.py")
+        if os.path.exists(nodes_py_path):
+            with open(nodes_py_path, "r") as f:
+                content = f.read()
+            
+            # Remove the specific import line if it exists
+            # We use a simple string replacement or regex
+            if "from comfy_api.internal" in content:
+                content = re.sub(r"^from comfy_api\.internal.*$", "", content, flags=re.MULTILINE)
+                with open(nodes_py_path, "w") as f:
+                     f.write(content)
+        
         # Directories to copy
         dirs = ["comfy", "comfy_extras"]
         for d in dirs:
