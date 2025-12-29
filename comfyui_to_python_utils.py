@@ -12,7 +12,9 @@ def import_custom_nodes() -> None:
     import asyncio
     import execution
     from nodes import init_extra_nodes
-    sys.path.insert(0, find_path("ComfyUI"))
+    comfy_path = find_path("ComfyUI")
+    if comfy_path is not None:
+        sys.path.insert(0, comfy_path)
     import server
 
     # Creating a new event loop and setting it as the default loop

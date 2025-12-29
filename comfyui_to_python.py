@@ -6,6 +6,7 @@ import os
 import random
 import sys
 import re
+import shutil
 from typing import Dict, List, Any, Callable, Tuple, TextIO
 from argparse import ArgumentParser
 
@@ -782,10 +783,12 @@ class LibraryCodeGenerator(CodeGenerator):
             "from typing import Sequence, Mapping, Any, Union",
             "import torch",
             "import argparse",
-            "from utils import get_value_at_index, find_path, add_comfyui_directory_to_sys_path, add_extra_model_paths, import_custom_nodes",
+            "",
+            "# Add bundled ComfyUI to sys.path",
+            "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'comfyui'))",
+            "",
+            "from utils import get_value_at_index, import_custom_nodes",
             "\n",
-            "add_comfyui_directory_to_sys_path()",
-            "add_extra_model_paths()",
         ]
 
         if custom_nodes:
@@ -868,6 +871,12 @@ class ComfyUItoLibrary:
         with open(utils_path, "r") as src, open(os.path.join(lib_path, "utils.py"), "w") as dst:
              dst.write(src.read())
 
+        # Copy ComfyUI Core
+        self.copy_comfyui_core(lib_path)
+        
+        # Copy Custom Nodes
+        custom_node_paths = self.copy_custom_nodes(lib_path)
+
         # Determine load order
         data = json.loads(self.workflow)
         if os.environ.get("RUNNING_IN_COMFYUI") != "TRUE":
@@ -881,6 +890,81 @@ class ComfyUItoLibrary:
         
         with open(os.path.join(lib_path, "main.py"), "w") as f:
             f.write(generated_code)
+
+    def copy_comfyui_core(self, lib_path):
+        comfyui_path = find_path("ComfyUI")
+        if not comfyui_path:
+             print("Warning: ComfyUI path not found. Skipping core bundling.")
+             return
+
+        dest_comfyui = os.path.join(lib_path, "comfyui")
+        if not os.path.exists(dest_comfyui):
+            os.makedirs(dest_comfyui)
+        
+        # Files to copy
+        files = ["nodes.py", "execution.py", "server.py", "folder_paths.py", "latent_preview.py", "cuda_malloc.py", "node_helpers.py"]
+        for f in files:
+            src = os.path.join(comfyui_path, f)
+            if os.path.exists(src):
+                shutil.copy2(src, dest_comfyui)
+        
+        # Directories to copy
+        dirs = ["comfy", "comfy_extras"]
+        for d in dirs:
+            src = os.path.join(comfyui_path, d)
+            dst = os.path.join(dest_comfyui, d)
+            if os.path.exists(src):
+                 if os.path.exists(dst):
+                     shutil.rmtree(dst)
+                 shutil.copytree(src, dst)
+    
+    def copy_custom_nodes(self, lib_path):
+        # We need to identify used custom nodes. 
+        # For simplicity in this step, we'll try to identify where loaded nodes come from.
+        # Ideally we only bundle what is used, but identifying "package root" from a node class file is tricky reliably.
+        # A heuristic: inspect.getfile(class) -> traverse up until 'custom_nodes' is parent.
+        
+        # Place custom nodes inside the comfyui directory so default folder_paths find them
+        dest_custom_nodes = os.path.join(lib_path, "comfyui", "custom_nodes")
+        if not os.path.exists(dest_custom_nodes):
+            os.makedirs(dest_custom_nodes)
+            
+        data = json.loads(self.workflow)
+        used_classes = set(node["class_type"] for node in data.values())
+        
+        copied_paths = set()
+        
+        for class_type in used_classes:
+            if class_type not in NODE_CLASS_MAPPINGS:
+                continue
+            
+            node_class = NODE_CLASS_MAPPINGS[class_type]
+            try:
+                file_path = inspect.getfile(node_class)
+            except (TypeError, OSError):
+                continue
+                
+            if "custom_nodes" in file_path:
+                # Naive attemp to find the custom node root dir
+                # Split path by 'custom_nodes'
+                parts = file_path.split("custom_nodes")
+                if len(parts) > 1:
+                    # parts[0] is prefix, parts[1] is /Component/file.py
+                    # We want 'Component'
+                    sub_parts = parts[1].strip(os.path.sep).split(os.path.sep)
+                    if sub_parts:
+                        node_name = sub_parts[0]
+                        # Full source path
+                        src_path = os.path.join(parts[0], "custom_nodes", node_name)
+                        
+                        if src_path not in copied_paths:
+                            dst_path = os.path.join(dest_custom_nodes, node_name)
+                            if os.path.exists(src_path):
+                                if os.path.exists(dst_path):
+                                    shutil.rmtree(dst_path)
+                                shutil.copytree(src_path, dst_path)
+                                copied_paths.add(src_path)
+        return copied_paths
 
         # Write requirements.txt
         with open(os.path.join(lib_path, "requirements.txt"), "w") as f:
