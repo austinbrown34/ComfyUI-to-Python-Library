@@ -4,6 +4,7 @@ import os
 from io import StringIO
 
 import traceback
+import io
 
 from aiohttp import web
 
@@ -57,18 +58,49 @@ async def save_as_script(request):
         traceback.print_exc()
         return web.Response(text=str(e), status=500)
 
+import tempfile
+import shutil
+import zipfile
+
 @server.PromptServer.instance.routes.post("/saveaslibrary")
 async def save_as_library(request):
     try:
         data = await request.json()
         name = data["name"]
-        destination = data["destination"]
+        
+        # We don't need destination anymore, we'll use a temp dir
         workflow = data["workflow"]
 
-        from comfyui_to_python import ComfyUItoLibrary
-        ComfyUItoLibrary(workflow=workflow, library_name=name, destination_path=destination)
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            from comfyui_to_python import ComfyUItoLibrary
+            # Generate the library in the temp directory
+            ComfyUItoLibrary(workflow=workflow, library_name=name, destination_path=temp_dir)
+            
+            # The library is now at os.path.join(temp_dir, name)
+            lib_path = os.path.join(temp_dir, name)
+            
+            # Create a zip file in memory
+            sio = StringIO()
+            # We need bytes for zip file
+            bio = io.BytesIO()
+            
+            # Create a zip file from the directory
+            shutil.make_archive(os.path.join(temp_dir, name), 'zip', lib_path)
+            
+            # Read the zip file back
+            zip_path = os.path.join(temp_dir, name + ".zip")
+            with open(zip_path, "rb") as f:
+                zip_data = f.read()
 
-        return web.Response(text="Library created successfully", status=200)
+            return web.Response(
+                body=zip_data, 
+                status=200,
+                headers={
+                    "Content-Type": "application/zip",
+                    "Content-Disposition": f"attachment; filename={name}.zip"
+                }
+            )
     except Exception as e:
         traceback.print_exc()
         return web.Response(text=str(e), status=500)

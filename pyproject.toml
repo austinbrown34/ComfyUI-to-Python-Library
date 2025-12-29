@@ -6,10 +6,10 @@ license = { text = "MIT License" }
 dependencies = ["black"]
 
 [project.urls]
-Repository = "https://github.com/pydn/ComfyUI-to-Python-Library"
+Repository = "https://github.com/austinbrown34/ComfyUI-to-Python-Library"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = "pydn"
+PublisherId = "austinbrown34"
 DisplayName = "ComfyUI-to-Python-Library"
 Icon = ""
