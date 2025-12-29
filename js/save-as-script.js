@@ -34,7 +34,7 @@ const extension = {
         }
 
         app.graphToPrompt().then(async (p) => {
-            const json = JSON.stringify({ name: filename + ".json", workflow: JSON.stringify(p.output, null, 2) }, null, 2); // convert the data to a JSON string
+            const json = JSON.stringify({ name: filename + ".json", workflow: JSON.stringify(p.output, null, 2) }, null, 2);
             var response = await api.fetchApi(`/saveasscript`, { method: "POST", body: json });
             if (response.status == 200) {
                 const blob = new Blob([await response.text()], { type: "text/python;charset=utf-8" });
@@ -71,7 +71,7 @@ const extension = {
 
             var response = await api.fetchApi(`/saveaslibrary`, { method: "POST", body: json });
             if (response.status == 200) {
-                const blob = new Blob([await response.blob()], { type: "application/zip" });
+                const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 if (!name.endsWith(".zip")) {
                     name += ".zip";

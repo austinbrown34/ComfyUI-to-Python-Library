@@ -1,11 +1,11 @@
 import sys
 import os
-
 from io import StringIO
-
 import traceback
 import io
-
+import tempfile
+import shutil
+import zipfile
 from aiohttp import web
 
 ext_dir = os.path.dirname(__file__)
@@ -57,10 +57,6 @@ async def save_as_script(request):
     except Exception as e:
         traceback.print_exc()
         return web.Response(text=str(e), status=500)
-
-import tempfile
-import shutil
-import zipfile
 
 @server.PromptServer.instance.routes.post("/saveaslibrary")
 async def save_as_library(request):
